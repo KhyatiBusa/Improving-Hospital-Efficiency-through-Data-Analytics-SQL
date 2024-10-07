@@ -1,0 +1,111 @@
+-- Identify the demographic profile of the patient population, including age and gender distribution.
+
+
+WITH patient_age_gender AS (
+  SELECT   
+    gender,
+    EXTRACT(YEAR FROM CURRENT_DATE()) - EXTRACT(YEAR FROM date_of_birth) AS age
+FROM `famous-cursor-380420.Healthcare_Database.Patients`
+WHERE 
+    gender IS NOT NULL)
+SELECT 
+  gender,
+  COUNT(*) AS total_patients,
+  ROUND(AVG(age), 1) AS average_age,
+  MIN(age) AS youngest_age,
+  MAX(age) AS oldest_age,
+  COUNTIF(age BETWEEN 0 AND 17) AS Pediatric,
+  COUNTIF(age BETWEEN 18 AND 64) AS Adult,
+  COUNTIF(age > 65) AS Senior
+FROM 
+  patient_age_gender
+GROUP BY 
+  gender
+ORDER BY 
+  total_patients DESC;
+
+--Determine the most prevalent diagnoses and how they vary across different demographic groups.
+
+SELECT
+p.gender,
+ov.diagnosis,
+CASE 
+  WHEN EXTRACT(YEAR FROM CURRENT_DATE()) - EXTRACT(YEAR FROM date_of_birth) BETWEEN 0 AND 17 THEN 'Pediatric'
+  WHEN EXTRACT(YEAR FROM CURRENT_DATE()) - EXTRACT(YEAR FROM date_of_birth) BETWEEN 18 AND 64 THEN 'Adult'
+  ELSE 'Senior'
+END AS age_group,
+COUNT(*) AS patient_count
+FROM `famous-cursor-380420.Healthcare_Database.Patients` AS p
+  INNER JOIN `famous-cursor-380420.Healthcare_Database.Outpatient_Visits` AS ov
+  ON p.patient_id=ov.patient_id
+GROUP BY 
+  gender, 
+  diagnosis,
+  CASE 
+  WHEN EXTRACT(YEAR FROM CURRENT_DATE()) - EXTRACT(YEAR FROM date_of_birth) BETWEEN 0 AND 17 THEN 'Pediatric'
+  WHEN EXTRACT(YEAR FROM CURRENT_DATE()) - EXTRACT(YEAR FROM date_of_birth) BETWEEN 18 AND 64 THEN 'Adult'
+  ELSE 'Senior'
+  END
+ORDER BY gender, age_group, patient_count DESC;
+
+--Analyze the most common appointment times and their distribution throughout the day.
+
+SELECT 
+  appointment_time,
+  COUNT(*) AS appointment_count
+FROM `famous-cursor-380420.Healthcare_Database.Appointment_Analysis`
+GROUP BY appointment_time
+ORDER BY appointment_count DESC;
+
+
+-- What are the most common lab tests?
+
+SELECT 
+  test_name,
+  COUNT(*) AS test_count
+FROM `famous-cursor-380420.Healthcare_Database.Lab_Results`
+GROUP BY test_name
+ORDER BY test_count DESC;
+
+--Identify patients with abnormal fasting blood sugar levels for early intervention.
+
+SELECT
+  p.patient_id,
+  p.patient_name,
+  lr.result_value
+FROM `famous-cursor-380420.Healthcare_Database.Patients` AS p
+ INNER JOIN `famous-cursor-380420.Healthcare_Database.Outpatient_Visits` AS ov
+ ON p.patient_id = ov.patient_id
+  INNER JOIN `famous-cursor-380420.Healthcare_Database.Lab_Results` AS lr
+  ON ov.visit_id=lr.visit_id
+WHERE lr.test_name = "Fasting Blood Sugar" 
+  AND (lr.result_value <70 or lr.result_value >100)
+ORDER BY result_value;
+
+--Categorize patients into high, medium, and low risk for cardiovascular disease based on smoking status and diagnoses.
+
+SELECT 
+  CASE
+    WHEN smoker_status= True AND (diagnosis='Hypertension' OR diagnosis='Diabetes') THEN 'High Risk'
+    WHEN smoker_status= False AND (diagnosis='Hypertension' OR diagnosis='Diabetes') THEN 'Medium Risk'
+    ELSE 'Low Risk'
+  END AS Risk_category,
+  COUNT (patient_id) AS num_patients
+FROM `famous-cursor-380420.Healthcare_Database.Outpatient_Visits`
+GROUP BY Risk_category;
+
+
+-- Identify patients readmitted within 30 days, including details of initial and readmission visits.
+
+SELECT 
+  ov_initial.patient_id,
+  ov_initial.visit_date AS initial_visit_date,
+  ov_initial.reason_for_visit AS reason_for_initial_visit,
+  ov_readmit.visit_date AS readmission_date,
+  ov_readmit.reason_for_visit AS reason_readmission,
+  DATE_DIFF(ov_readmit.visit_date, ov_initial.visit_date, DAY) AS days_between_initial_and_readmission
+FROM `famous-cursor-380420.Healthcare_Database.Outpatient_Visits` AS ov_initial
+  INNER JOIN `famous-cursor-380420.Healthcare_Database.Outpatient_Visits` AS ov_readmit
+  ON ov_initial.patient_id = ov_readmit.patient_id
+WHERE DATE_DIFF(ov_readmit.visit_date, ov_initial.visit_date, DAY) <= 30
+  AND ov_readmit.visit_date > ov_initial.visit_date;
